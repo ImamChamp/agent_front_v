@@ -38,11 +38,11 @@ prompt_for_decompose = '''
 не используя инструменты Marcdown, разбей минимум на 5 задач, по каждой задаче на отдельной строке жду описание, тип и название задачи'''
 CONFLUENCE_URL = "https://queerxdisasster.atlassian.net/wiki"
 CONFLUENCE_USERNAME = "7germania7@gmail.com"
-CONFLUENCE_API_TOKEN = "ATATT3xFfGF08nF1MUT2FYJTxEbAuBl8aajQ1FYyntXIo1xFGppoXriNoBJSZxz1FbQQ678LgQfArqI7vc8-spHSn-5NWZzCzdqEjo5utIDlK269XkkLIouQaAGA84v4rfYzoxpzOFuikU6XWnoeRnpZQwJnPeUR8hQRSQkXLkg2hYDCsDgloCI=A414B3DA"
+CONFLUENCE_API_TOKEN = "ATATT3xFfGF0OlN3ffQp5CJFvw1pniUbJZg24xG-AxSiumNeMCE-W-CT_cKBiBPMTbgKrpyW0-kUoSnl3AOsaqWphA8p8sAnDs2ZdJpAykwVfmufcln2HcwhZDiMNK1rM0s02BJM9W__KaAqtRooyI6-HVdfN6qh-A959zxsCKYSMmLkPVQuAzQ=EC95BE24"
 
 JIRA_SERVER = "https://queerxdisasster.atlassian.net"
 JIRA_EMAIL = "7germania7@gmail.com"
-JIRA_API_TOKEN = "ATATT3xFfGF08nF1MUT2FYJTxEbAuBl8aajQ1FYyntXIo1xFGppoXriNoBJSZxz1FbQQ678LgQfArqI7vc8-spHSn-5NWZzCzdqEjo5utIDlK269XkkLIouQaAGA84v4rfYzoxpzOFuikU6XWnoeRnpZQwJnPeUR8hQRSQkXLkg2hYDCsDgloCI=A414B3DA"
+JIRA_API_TOKEN = "ATATT3xFfGF0OlN3ffQp5CJFvw1pniUbJZg24xG-AxSiumNeMCE-W-CT_cKBiBPMTbgKrpyW0-kUoSnl3AOsaqWphA8p8sAnDs2ZdJpAykwVfmufcln2HcwhZDiMNK1rM0s02BJM9W__KaAqtRooyI6-HVdfN6qh-A959zxsCKYSMmLkPVQuAzQ=EC95BE24"
 
 # Инициализация клиента Confluence
 confluence = Confluence(
@@ -237,6 +237,27 @@ async def chat(
     except Exception as e:
         return ChatResponse(message=f"Error processing request: {str(e)}")
 
+def task_generator(response):
+    list_of_lines = response.message.split('\n')
+    tsk_names = [wrd.lstrip("- **Название задачи**: ") for wrd in list_of_lines if 'Название' in wrd]
+    tsk_types = [wrd.lstrip("- **Тип задачи**: ") for wrd in list_of_lines if 'Тип' in wrd]
+    tsk_desc = [wrd.lstrip("- **Описание задачи**: ") for wrd in list_of_lines if 'Описание' in wrd]
+    user_stories = []
+    for i in range(len(tsk_names) - 1):
+        if 'Task' in tsk_types[i]:
+            tsl = 'Task'
+        else:
+            tsl = 'Epic'
+        print(tsl)
+        jira_dict = {
+            'project': {'key': 'KAN'},  # ключ проекта в Jira
+            'summary': tsk_names[i],
+            'description': tsk_desc[i],
+            'issuetype': {'name': tsl},
+        }
+        user_stories.append(jira_dict)
+    return user_stories
+
 
 @mcp.tool()
 async def decompose(
@@ -304,27 +325,7 @@ async def decompose(
 
         response = ChatResponse(message=ai_response)
 
-        list_of_lines = response.message.split('\n')
-        tsk_names = [wrd.lstrip("- **Название задачи**: ") for wrd in list_of_lines if 'Название' in wrd]
-        tsk_types = [wrd.lstrip("- **Тип задачи**: ") for wrd in list_of_lines if 'Тип' in wrd]
-        tsk_desc = [wrd.lstrip("- **Описание задачи**: ") for wrd in list_of_lines if 'Описание' in wrd]
-        user_stories = []
-        for i in range(len(tsk_names) - 1):
-            if 'Task' in tsk_types[i]:
-                tsl = 'Task'
-            else:
-                tsl = 'Epic'
-            print(tsl)
-            jira_dict = {
-                'project': {'key': 'KAN'},  # ключ проекта в Jira
-                'summary': tsk_names[i],
-                'description': tsk_desc[i],
-                'issuetype': {'name': tsl},
-            }
-            user_stories.append(jira_dict)
-        # for us in user_stories:
-        #     issue_key = create_jira_issue(jira_client, us)
-        #     print(f"Создана задача: {issue_key}")
+
         return ChatResponse(message=ai_response)
     except Exception as e:
         return ChatResponse(message=f"Translation error: {str(e)}")
@@ -405,6 +406,12 @@ if __name__ == "__main__":
         while 'Выход' not in tsk:
             response = await decompose(tsk, ss_id)
             print(f"Response: {response.message}")
+            flag_task = input("Хотите создать таски в Jira? (y/n): ")
+            if flag_task == 'y':
+                user_stories = task_generator(response)
+                for us in user_stories:
+                    issue_key = create_jira_issue(jira_client, us)
+                    print(f"Создана задача: {issue_key}")
             tsk = input("Enter your message: ")
         # translation = await translate("Привет, как дела?", "английский")
         # print(f"Translation: {translation.message}")
