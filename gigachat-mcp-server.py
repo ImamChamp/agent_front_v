@@ -237,6 +237,8 @@ async def chat(
     except Exception as e:
         return ChatResponse(message=f"Error processing request: {str(e)}")
 
+all_responses = []
+
 def task_generator(response):
     list_of_lines = response.message.split('\n')
     tsk_names = [wrd.lstrip("- **Название задачи**: ") for wrd in list_of_lines if 'Название' in wrd]
@@ -288,6 +290,14 @@ async def decompose(
     #     return ChatResponse(message="Укажите, пожалуйста вашу роль и планируемую дату завершения задачи")
 
     try:
+        if task.lower().strip('') == 'создать таски':
+            try:
+                user_stories = task_generator(all_responses[-1])
+                for us in user_stories:
+                    issue_key = create_jira_issue(jira_client, us)
+                    print(f"Создана задача: {issue_key}")
+            except Exception as e:
+                print(f"Задачи переданы некорректно! Ошибка: {e}")
 
         if session_id not in conversation_history:
             conversation_history[session_id] = []
@@ -325,7 +335,7 @@ async def decompose(
 
         response = ChatResponse(message=ai_response)
 
-
+        all_responses.append(response)
         return ChatResponse(message=ai_response)
     except Exception as e:
         return ChatResponse(message=f"Translation error: {str(e)}")
@@ -406,12 +416,7 @@ if __name__ == "__main__":
         while 'Выход' not in tsk:
             response = await decompose(tsk, ss_id)
             print(f"Response: {response.message}")
-            flag_task = input("Хотите создать таски в Jira? (y/n): ")
-            if flag_task == 'y':
-                user_stories = task_generator(response)
-                for us in user_stories:
-                    issue_key = create_jira_issue(jira_client, us)
-                    print(f"Создана задача: {issue_key}")
+
             tsk = input("Enter your message: ")
         # translation = await translate("Привет, как дела?", "английский")
         # print(f"Translation: {translation.message}")
