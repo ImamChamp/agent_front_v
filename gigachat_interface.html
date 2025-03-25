@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GigaChat Web Interface</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            height: 80vh;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .chat-header {
+            background-color: #4a76a8;
+            color: white;
+            padding: 15px;
+            font-size: 1.2em;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .session-controls {
+            display: flex;
+            gap: 10px;
+        }
+        .chat-messages {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background-color: white;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 18px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        .user-message {
+            background-color: #e9f2fd;
+            margin-left: auto;
+            border-bottom-right-radius: 5px;
+        }
+        .assistant-message {
+            background-color: #f0f0f0;
+            margin-right: auto;
+            border-bottom-left-radius: 5px;
+        }
+        .message-time {
+            font-size: 0.7em;
+            color: #888;
+            margin-top: 5px;
+            text-align: right;
+        }
+        .input-area {
+            display: flex;
+            padding: 15px;
+            background-color: white;
+            border-top: 1px solid #eee;
+        }
+        #message-input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            outline: none;
+        }
+        #send-button {
+            background-color: #4a76a8;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            padding: 10px 15px;
+            margin-left: 10px;
+            cursor: pointer;
+        }
+        #send-button:hover {
+            background-color: #3d6293;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 10px;
+        }
+        .tab {
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            background-color: #f8f8f8;
+            cursor: pointer;
+        }
+        .tab.active {
+            background-color: #4a76a8;
+            color: white;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .decompose-form {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            outline: none;
+        }
+        textarea {
+            min-height: 100px;
+        }
+        button {
+            background-color: #4a76a8;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 10px 15px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #3d6293;
+        }
+    </style>
+</head>
+<body>
+    <div class="tabs">
+        <div class="tab active" data-tab="chat">Чат</div>
+        <div class="tab" data-tab="decompose">Декомпозиция задач</div>
+    </div>
+
+    <div id="chat-tab" class="tab-content active">
+        <div class="chat-container">
+            <div class="chat-header">
+                <span>GigaChat</span>
+                <div class="session-controls">
+                    <input type="text" id="session-id" placeholder="ID сессии" value="default">
+                    <button id="clear-session">Очистить историю</button>
+                </div>
+            </div>
+            <div class="chat-messages" id="messages-container"></div>
+            <div class="input-area">
+                <input type="text" id="message-input" placeholder="Введите сообщение...">
+                <button id="send-button">Отправить</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="decompose-tab" class="tab-content">
+        <div class="decompose-form">
+            <h2>Декомпозиция задачи</h2>
+            <div class="form-group">
+                <label for="task-input">Задача:</label>
+                <textarea id="task-input" placeholder="Опишите вашу задачу..."></textarea>
+            </div>
+            <div class="form-group">
+                <label for="role-input">Ваша роль в команде:</label>
+                <input type="text" id="role-input" placeholder="Например: Разработчик, Менеджер, Дизайнер...">
+            </div>
+            <div class="form-group">
+                <label for="date-input">Планируемая дата завершения:</label>
+                <input type="text" id="date-input" placeholder="Например: 30.04.2025">
+            </div>
+            <button id="decompose-button">Декомпозировать</button>
+        </div>
+        <div class="chat-container" style="height: auto; min-height: 300px;">
+            <div class="chat-header">
+                <span>Результат декомпозиции</span>
+            </div>
+            <div class="chat-messages" id="decompose-result"></div>
+        </div>
+    </div>
+
+    <script>
+        // Переключение между вкладками
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+                this.classList.add('active');
+                document.getElementById(this.dataset.tab + '-tab').classList.add('active');
+            });
+        });
+
+        // Обработка отправки сообщения
+        document.getElementById('send-button').addEventListener('click', sendMessage);
+        document.getElementById('message-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        // Обработка очистки истории
+        document.getElementById('clear-session').addEventListener('click', clearSessionHistory);
+
+        // Обработка декомпозиции задачи
+        document.getElementById('decompose-button').addEventListener('click', decomposeTask);
+
+        function formatTimestamp(timestamp) {
+            const date = new Date(timestamp * 1000);
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        async function sendMessage() {
+            const messageInput = document.getElementById('message-input');
+            const message = messageInput.value.trim();
+            const sessionId = document.getElementById('session-id').value.trim() || 'default';
+
+            if (!message) return;
+
+            // Добавляем сообщение пользователя в чат
+            addMessageToChat('user', message, Date.now() / 1000);
+            messageInput.value = '';
+
+            try {
+                // Отправляем запрос к API
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        session_id: sessionId
+                    })
+                });
+
+                const data = await response.json();
+
+                // Добавляем ответ ассистента в чат
+                addMessageToChat('assistant', data.message, data.timestamp);
+
+                // Прокручиваем чат вниз
+                const messagesContainer = document.getElementById('messages-container');
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+            } catch (error) {
+                console.error('Error:', error);
+                addMessageToChat('assistant', 'Произошла ошибка при отправке сообщения.', Date.now() / 1000);
+            }
+        }
+
+        async function clearSessionHistory() {
+            const sessionId = document.getElementById('session-id').value.trim() || 'default';
+
+            try {
+                const response = await fetch('/api/clear_history', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId
+                    })
+                });
+
+                const data = await response.json();
+
+                // Очищаем чат на странице
+                document.getElementById('messages-container').innerHTML = '';
+
+                // Добавляем системное сообщение
+                addMessageToChat('assistant', `История сессии ${sessionId} очищена.`, Date.now() / 1000);
+
+            } catch (error) {
+                console.error('Error:', error);
+                addMessageToChat('assistant', 'Произошла ошибка при очистке истории.', Date.now() / 1000);
+            }
+        }
+
+        async function decomposeTask() {
+            const task = document.getElementById('task-input').value.trim();
+            const role = document.getElementById('role-input').value.trim();
+            const date = document.getElementById('date-input').value.trim();
+            const sessionId = document.getElementById('session-id').value.trim() || 'default';
+
+            if (!task || !role || !date) {
+                alert('Пожалуйста, заполните все поля для декомпозиции задачи.');
+                return;
+            }
+
+            // Очищаем предыдущий результат
+            document.getElementById('decompose-result').innerHTML = '';
+
+            // Добавляем сообщение о задаче
+            const decompositionMessage = `Задача: ${task}
+Роль: ${role}
+Дата завершения: ${date}`;
+            addMessageToDecompositionResult('user', decompositionMessage, Date.now() / 1000);
+
+            try {
+                // Отправляем запрос к API
+                const response = await fetch('/api/decompose', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        task: task,
+                        role: role,
+                        date: date,
+                        session_id: sessionId
+                    })
+                });
+
+                const data = await response.json();
+
+                // Добавляем результат декомпозиции
+                addMessageToDecompositionResult('assistant', data.message, data.timestamp);
+
+            } catch (error) {
+                console.error('Error:', error);
+                addMessageToDecompositionResult('assistant', 'Произошла ошибка при декомпозиции задачи.', Date.now() / 1000);
+            }
+        }
+
+        function addMessageToChat(role, content, timestamp) {
+            const messagesContainer = document.getElementById('messages-container');
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message');
+            messageDiv.classList.add(role === 'user' ? 'user-message' : 'assistant-message');
+
+            // Форматируем контент с поддержкой переносов строк
+            const formattedContent = content.replace(/
+/g, '<br>');
+
+            messageDiv.innerHTML = `
+                <div>${formattedContent}</div>
+        <div class="message-time">${formatTimestamp(timestamp)}</div>
+                    `;
+
+                    messagesContainer.appendChild(messageDiv);
+                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                }
+
+                function addMessageToDecompositionResult(role, content, timestamp) {
+                    const resultContainer = document.getElementById('decompose-result');
+                    const messageDiv = document.createElement('div');
+                    messageDiv.classList.add('message');
+                    messageDiv.classList.add(role === 'user' ? 'user-message' : 'assistant-message');
+
+                    // Форматируем контент с поддержкой переносов строк
+                    const formattedContent = content.replace(/
+/g, '<br>');
+
+                    messageDiv.innerHTML = `
+                        <div>${formattedContent}</div>
+                        <div class="message-time">${formatTimestamp(timestamp)}</div>
+                    `;
+
+                    resultContainer.appendChild(messageDiv);
+                    resultContainer.scrollTop = resultContainer.scrollHeight;
+                }
+
+                // Загружаем историю сообщений при загрузке страницы
+                async function loadChatHistory() {
+                    const sessionId = document.getElementById('session-id').value.trim() || 'default';
+
+                    try {
+                        const response = await fetch(`/api/get_history?session_id=${sessionId}`);
+                        const history = await response.json();
+
+                        document.getElementById('messages-container').innerHTML = '';
+
+                        history.forEach(message => {
+                            if (message.role === 'user' || message.role === 'assistant') {
+                                // Используем текущее время, так как история не содержит timestamp
+                                addMessageToChat(
+                                    message.role, 
+                                    message.content, 
+                                    Date.now() / 1000
+                                );
+                            }
+                        });
+
+                    } catch (error) {
+                        console.error('Error loading chat history:', error);
+                    }
+                }
+
+                // Загружаем историю при загрузке страницы
+                window.addEventListener('load', loadChatHistory);
+
+                // Обновляем историю при изменении ID сессии
+                document.getElementById('session-id').addEventListener('change', loadChatHistory);
+            </script>
+        </body>
+        </html>
