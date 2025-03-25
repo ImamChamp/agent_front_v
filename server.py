@@ -106,11 +106,44 @@ def get_confluence_context_if_needed(text: str) -> str:
                 confluence_content += f"Ошибка чтения Confluence: {e}\n"
     return confluence_content
 
+all_responses = []
+
+def task_generator(response):
+    list_of_lines = response.message.split('\n')
+    tsk_names = [wrd.lstrip("- **Название задачи**: ") for wrd in list_of_lines if 'Название' in wrd]
+    tsk_types = [wrd.lstrip("- **Тип задачи**: ") for wrd in list_of_lines if 'Тип' in wrd]
+    tsk_desc = [wrd.lstrip("- **Описание задачи**: ") for wrd in list_of_lines if 'Описание' in wrd]
+    user_stories = []
+    for i in range(len(tsk_names) - 1):
+        if 'Task' in tsk_types[i]:
+            tsl = 'Task'
+        else:
+            tsl = 'Epic'
+        print(tsl)
+        jira_dict = {
+            'project': {'key': 'KAN'},  # ключ проекта в Jira
+            'summary': tsk_names[i],
+            'description': tsk_desc[i],
+            'issuetype': {'name': tsl},
+        }
+        user_stories.append(jira_dict)
+    return user_stories
+
+
 # -----------------------------------------------------------------------------
 # Основная функция для декомпозиции
 def decompose_task(task: str, session_id: str = "default") -> str:
     # Проверяем, есть ли ссылки, подгружаем
     conf_context = get_confluence_context_if_needed(task)
+
+    if task.lower().strip('') == 'создать таски':
+        try:
+            user_stories = task_generator(all_responses[-1])
+            for us in user_stories:
+                issue_key = create_jira_issue(jira_client, us)
+                print(f"Создана задача: {issue_key}")
+        except Exception as e:
+            print(f"Задачи переданы некорректно! Ошибка: {e}")
 
     if session_id not in conversation_history:
         conversation_history[session_id] = []
@@ -133,41 +166,6 @@ def decompose_task(task: str, session_id: str = "default") -> str:
         return f"Ошибка при обработке запроса: {str(e)}"
 
     # Пытаемся автоматически создать задачи в Jira
-    try:
-        lines = ai_response.split('\n')
-        tsk_names = [ln.lstrip("- **Название задачи**: ").strip() for ln in lines if 'Название' in ln]
-        tsk_types = [ln.lstrip("- **Тип задачи**: ").strip() for ln in lines if 'Тип' in ln]
-        tsk_desc = [ln.lstrip("- **Описание задачи**: ").strip() for ln in lines if 'Описание' in ln]
-
-        user_stories = []
-        for i in range(len(tsk_names)):
-            # Определяем тип задачи (Task/Epic)
-            if i < len(tsk_types) and "Task" in tsk_types[i]:
-                new_issue_type = "Task"
-            else:
-                new_issue_type = "Epic"
-
-            # Описание подхватываем, если есть
-            if i < len(tsk_desc):
-                tdesc = tsk_desc[i]
-            else:
-                tdesc = "Описание не найдено"
-
-            jira_dict = {
-                "project": {"key": "KAN"},  # ваш ключ проекта
-                "summary": tsk_names[i],
-                "description": tdesc,
-                "issuetype": {"name": new_issue_type},
-            }
-            user_stories.append(jira_dict)
-
-        for us in user_stories:
-            issue_key = create_jira_issue(jira_client, us)
-            print(f"Создана задача в Jira: {issue_key}")
-
-    except Exception as je:
-        print(f"Ошибка при создании задач в Jira: {je}")
-
     return ai_response
 
 # -----------------------------------------------------------------------------
